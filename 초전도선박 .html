@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>초전도 전동기 추진 시스템</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #020617; color: white; display: flex; flex-direction: column; align-items: center; margin: 0; overflow: hidden; }
+        canvas { background: linear-gradient(to bottom, #0f172a 60%, #1e3a8a 60%, #172554 100%); border-bottom: 2px solid #38bdf8; }
+        .ui-panel { position: absolute; bottom: 20px; width: 90%; background: rgba(15, 23, 42, 0.9); padding: 20px; border-radius: 15px; border: 1px solid #334155; backdrop-filter: blur(10px); }
+        .data-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 15px; }
+        .card { background: #1e293b; padding: 10px; border-radius: 8px; text-align: center; border-top: 3px solid #38bdf8; }
+        .highlight { color: #38bdf8; font-weight: bold; text-shadow: 0 0 5px #38bdf8; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2 style="margin-top: 10px;">⚡ 초전도 전동기 추진(HTS Propulsion) 에너지 흐름 시뮬레이션</h2>
+    <canvas id="htisCanvas"></canvas>
+    
+    <div class="ui-panel">
+        <div class="data-grid">
+            <div class="card">소모 전력: <span id="powerConsumption" class="highlight">0</span> kW</div>
+            <div class="card">도선 상태: <span id="wireStatus" class="highlight">초전도(R=0)</span></div>
+            <div class="card">자기장 강도: <span id="magField" class="highlight">0</span> Tesla</div>
+            <div class="card">회전 토크: <span id="torqueVal" class="highlight">0</span> N·m</div>
+            <div class="card">항해 속력: <span id="speedVal" class="highlight">0</span> knots</div>
+        </div>
+        <input type="range" id="throttle" min="0" max="100" value="40">
+        <p style="font-size: 13px; color: #94a3b8; margin-top: 10px; text-align: center;">
+            <b>시스템 이해:</b> 전원 → <span style="color:#38bdf8">초전도 도선(청색 광원)</span> → 초강력 자기장 형성 → 축(Shaft) 회전 → 프로펠러 추진
+        </p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('htisCanvas');
+        const ctx = canvas.getContext('2d');
+        const throttle = document.getElementById('throttle');
+        const powerConsumption = document.getElementById('powerConsumption'); // 추가
+        const magField = document.getElementById('magField');
+        const torqueVal = document.getElementById('torqueVal');
+        const speedVal = document.getElementById('speedVal');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight * 0.75;
+
+        let angle = 0;
+        let waveOffset = 0;
+        let electricityFlow = 0;
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 소모 전력 계산 (구리 대비 약 1/4 수준의 전력으로 동일 기동 가능하게 설정)
+            let currentPwr = (throttle.value * 3.2).toLocaleString();
+            powerConsumption.innerText = currentPwr;
+
+            let pwr = throttle.value * 0.0008;
+            angle += pwr;
+            waveOffset += throttle.value * 0.2; 
+            electricityFlow += 0.2; 
+            
+            magField.innerText = (throttle.value * 0.15).toFixed(1);
+            torqueVal.innerText = (throttle.value * 125).toLocaleString();
+            speedVal.innerText = Math.floor(throttle.value * 0.35);
+
+            const cx = canvas.width / 2 + 100;
+            const cy = 320;
+            const px = cx - 450;
+
+            // 1. 역동적 파도
+            ctx.fillStyle = "#1d4ed8";
+            for(let j=0; j<2; j++) {
+                ctx.globalAlpha = 0.5 + (j*0.3);
+                ctx.beginPath();
+                for(let i=0; i<=canvas.width; i+=20) {
+                    let s = Math.sin((i + waveOffset * (j+1)) * 0.01) * 15;
+                    ctx.lineTo(i, canvas.height * 0.68 + s + (j*15));
+                }
+                ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height); ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+
+            // 2. 선체 구조
+            ctx.fillStyle = "#334155";
+            ctx.beginPath();
+            ctx.moveTo(cx - 550, cy + 150); ctx.lineTo(cx + 350, cy + 150);
+            ctx.lineTo(cx + 400, cy - 80); ctx.lineTo(cx - 600, cy - 80);
+            ctx.closePath(); ctx.fill();
+
+            // 3. 전원 및 초전도 도선
+            ctx.fillStyle = "#475569"; ctx.fillRect(cx + 200, cy - 50, 80, 80);
+            ctx.font = "12px Arial"; ctx.fillStyle = "white"; ctx.fillText("POWER", cx + 220, cy - 60);
+
+            ctx.beginPath();
+            ctx.moveTo(cx + 200, cy - 10); ctx.lineTo(cx + 80, cy - 10);
+            ctx.strokeStyle = "#1e3a8a"; ctx.lineWidth = 12; ctx.stroke();
+            ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 4;
+            ctx.setLineDash([10, 20]); ctx.lineDashOffset = -electricityFlow * 20;
+            ctx.stroke(); ctx.setLineDash([]); 
+
+            // 4. 초전도 전동기 & 자기장
+            ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 4;
+            ctx.strokeRect(cx - 80, cy - 70, 160, 140);
+            ctx.fillStyle = "rgba(56, 189, 248, 0.1)"; ctx.fillRect(cx - 80, cy - 70, 160, 140);
+            
+            if(throttle.value > 0) {
+                ctx.strokeStyle = `rgba(56, 189, 248, ${throttle.value/100})`;
+                ctx.lineWidth = 2;
+                for(let i=0; i<3; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, 100 + i*20, 50 + i*10, angle * 0.5, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+            }
+
+            // 5. 동력 전달 축
+            ctx.beginPath();
+            ctx.moveTo(cx - 80, cy); ctx.lineTo(px, cy);
+            ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 14; ctx.stroke();
+            ctx.strokeStyle = "#f8fafc"; ctx.lineWidth = 2; ctx.setLineDash([5, 15]);
+            ctx.lineDashOffset = -angle * 50; ctx.beginPath();
+            ctx.moveTo(cx - 80, cy - 4); ctx.lineTo(px, cy - 4); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 6. 프로펠러
+            ctx.save();
+            ctx.translate(px, cy); ctx.rotate(angle * 8);
+            for(let i=0; i<4; i++) {
+                ctx.rotate(Math.PI/2);
+                let grad = ctx.createLinearGradient(0, 0, 0, 40);
+                grad.addColorStop(0, "#fbbf24"); grad.addColorStop(1, "#b45309");
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.ellipse(0, 20, 12, 35, 0, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+
+            if(throttle.value > 0) {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+                for(let i=0; i<throttle.value/5; i++) {
+                    ctx.beginPath(); 
+                    ctx.arc(px - 20 - Math.random()*100, cy + (Math.random()-0.5)*60, 3 + Math.random()*4, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+        draw();
+    </script>
+</body>
+</html>
